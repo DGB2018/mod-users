@@ -1,5 +1,29 @@
 package org.folio.moduserstest;
 
+import java.net.HttpURLConnection;
+import java.net.URLEncoder;
+import java.sql.SQLException;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
+import java.time.Instant;
+import java.util.Date;
+import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+
+import org.folio.rest.RestVerticle;
+import org.folio.rest.client.TenantClient;
+import org.folio.rest.persist.PostgresClient;
+import org.folio.rest.tools.parser.JsonPathParser;
+import org.folio.rest.tools.utils.NetworkUtils;
+import org.joda.time.DateTime;
+import org.junit.AfterClass;
+import org.junit.BeforeClass;
+import org.junit.Rule;
+import org.junit.Test;
+import org.junit.rules.Timeout;
+import org.junit.runner.RunWith;
+
 import io.vertx.core.DeploymentOptions;
 import io.vertx.core.Future;
 import io.vertx.core.Handler;
@@ -14,30 +38,6 @@ import io.vertx.core.json.JsonObject;
 import io.vertx.ext.unit.Async;
 import io.vertx.ext.unit.TestContext;
 import io.vertx.ext.unit.junit.VertxUnitRunner;
-import java.io.UnsupportedEncodingException;
-import java.net.HttpURLConnection;
-import java.net.URLEncoder;
-import java.sql.SQLException;
-import java.text.DateFormat;
-import java.text.SimpleDateFormat;
-import java.util.Date;
-import java.util.UUID;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
-
-import org.folio.rest.RestVerticle;
-import org.folio.rest.client.TenantClient;
-import org.folio.rest.persist.PostgresClient;
-import org.folio.rest.tools.parser.JsonPathParser;
-import org.folio.rest.tools.utils.NetworkUtils;
-import org.joda.time.DateTime;
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
-import org.junit.Rule;
-import org.junit.Test;
-import org.junit.rules.Timeout;
-import org.junit.runner.RunWith;
 
 
 
@@ -657,9 +657,11 @@ public class RestVerticleIT {
   private Future<Void> createProxyfor(TestContext context) {
     System.out.println("Creating a new proxyfor entry\n");
     Future future = Future.future();
+    Instant expDate = Instant.now().plusSeconds(10000);
     JsonObject proxyObject = new JsonObject()
             .put("userId", "2498aeb2-23ca-436a-87ea-a4e1bfaa5bb5")
-            .put("proxyUserId", "2062d0ef-3f3e-40c5-a870-5912554bc0fa");
+            .put("proxyUserId", "2062d0ef-3f3e-40c5-a870-5912554bc0fa")
+            .put("expirationDate", expDate.toString());
     HttpClient client = vertx.createHttpClient();
     client.post(port, "localhost", "/proxiesfor", res -> {
       res.bodyHandler(body -> {
@@ -680,9 +682,11 @@ public class RestVerticleIT {
   private Future<Void> createProxyforWithSameUserId(TestContext context) {
     System.out.println("Trying to create a proxyfor with an existing userid\n");
     Future future = Future.future();
+    Instant expDate = Instant.now().plusSeconds(10000);
     JsonObject proxyObject = new JsonObject()
             .put("userId", "2498aeb2-23ca-436a-87ea-a4e1bfaa5bb5")
-            .put("proxyUserId", "5b0a9a0b-6eb6-447c-bc31-9c99940a29c5");
+            .put("proxyUserId", "5b0a9a0b-6eb6-447c-bc31-9c99940a29c5")
+            .put("expirationDate", expDate.toString());
     HttpClient client = vertx.createHttpClient();
     client.post(port, "localhost", "/proxiesfor", res -> {
       res.bodyHandler(body -> {
@@ -704,9 +708,11 @@ public class RestVerticleIT {
   private Future<Void> createProxyforWithSameProxyUserId(TestContext context) {
     System.out.println("Trying to create a proxyfor with an existing proxy userid\n");
     Future future = Future.future();
+    Instant expDate = Instant.now().plusSeconds(10000);
     JsonObject proxyObject = new JsonObject()
             .put("userId", "bd2cbc13-9d43-4a74-8090-75bc4e26a8df")
-            .put("proxyUserId", "2062d0ef-3f3e-40c5-a870-5912554bc0fa");
+            .put("proxyUserId", "2062d0ef-3f3e-40c5-a870-5912554bc0fa")
+            .put("expirationDate", expDate.toString());
     HttpClient client = vertx.createHttpClient();
     client.post(port, "localhost", "/proxiesfor", res -> {
       res.bodyHandler(body -> {
@@ -854,10 +860,12 @@ public class RestVerticleIT {
                 JsonObject proxyForObject = proxyForArray.getJsonObject(0);
                 String proxyForId = proxyForObject.getString("id");
                 System.out.println("Making put-by-id request\n");
+                Instant expDate = Instant.now().plusSeconds(10000);
+                proxyForObject.put("expirationDate", expDate.toString());
                 client.put(port, "localhost", "/proxiesfor/" + proxyForId, res2 -> {
                   res2.bodyHandler(body2 -> {
                     if(res2.statusCode() != 204) {
-                      future.fail("Expected code 204, got " + res.statusCode() + " : " + body2.toString());
+                      future.fail("Expected code 204, got " + res2.statusCode() + " : " + body2.toString());
                     } else {
                       future.complete();
                     }
@@ -906,11 +914,13 @@ public class RestVerticleIT {
               } else {
                 JsonObject proxyForObject = proxyForArray.getJsonObject(0);
                 String proxyForId = proxyForObject.getString("id");
+                Instant expDate = Instant.now().plusSeconds(10000);
+                proxyForObject.put("expirationDate", expDate.toString());
                 System.out.println("Making delete-by-id request\n");
                 client.delete(port, "localhost", "/proxiesfor/" + proxyForId, res2 -> {
                   res2.bodyHandler(body2 -> {
                     if(res2.statusCode() != 204) {
-                      future.fail("Expected code 204, got " + res.statusCode() + " : " + body2.toString());
+                      future.fail("Expected code 204, got " + res2.statusCode() + " : " + body2.toString());
                     } else {
                       future.complete();
                     }
@@ -1350,6 +1360,87 @@ public class RestVerticleIT {
     context.fail(e.getMessage());
   }
  }
+
+ @Test
+ public void testProfxyForValidation(TestContext context){
+   String proxyUrl = "http://localhost:"+port+"/proxiesfor";
+   Instant expDate = Instant.now().minusSeconds(10000);
+   JsonObject badProxyObject = new JsonObject()
+           .put("userId", "2498aeb2-23ca-436a-87ea-a4e1bfaa5bb5")
+           .put("proxyUserId", "2062d0ef-3f3e-40c5-a870-5912554bc0fa")
+           .put("expirationDate", expDate.toString());
+   expDate = Instant.now().plusSeconds(20000);
+   JsonObject goodProxyObject = new JsonObject()
+       .put("userId", "2498aeb2-23ca-436a-87ea-a4e1bfaa5bb5")
+       .put("proxyUserId", "2062d0ef-3f3e-40c5-a870-5912554bc0fa")
+       .put("expirationDate", expDate.toString());
+   JsonObject noProxyObject = new JsonObject()
+       .put("userId", "2498aeb2-23ca-436a-87ea-a4e1bfaa5bb5")
+       .put("proxyUserId", "2062d0ef-3f3e-40c5-a870-5912554bc0fa");
+   try {
+    /**add fail*/
+     CompletableFuture<Response> addProxyCF = new CompletableFuture();
+     send(proxyUrl, context, HttpMethod.POST, badProxyObject.encode(),
+       SUPPORTED_CONTENT_TYPE_JSON_DEF, 422,  new HTTPResponseHandler(addProxyCF));
+     Response addProxyResponse = addProxyCF.get(5, TimeUnit.SECONDS);
+     context.assertEquals(addProxyResponse.code, 422);
+     System.out.println(addProxyResponse.body +
+       "\nStatus - " + addProxyResponse.code + " at " + System.currentTimeMillis() + " for " + proxyUrl);
+
+     /**add fail*/
+     CompletableFuture<Response> addNoProxyCF = new CompletableFuture();
+     send(proxyUrl, context, HttpMethod.POST, noProxyObject.encode(),
+       SUPPORTED_CONTENT_TYPE_JSON_DEF, 422,  new HTTPResponseHandler(addNoProxyCF));
+     Response addNoProxyResponse = addNoProxyCF.get(5, TimeUnit.SECONDS);
+     context.assertEquals(addNoProxyResponse.code, 422);
+     System.out.println(addNoProxyResponse.body +
+       "\nStatus - " + addNoProxyResponse.code + " at " + System.currentTimeMillis() + " for " + proxyUrl);
+
+     /**add success*/
+     CompletableFuture<Response> addGoodProxyCF = new CompletableFuture();
+     send(proxyUrl, context, HttpMethod.POST, goodProxyObject.encode(),
+       SUPPORTED_CONTENT_TYPE_JSON_DEF, 201,  new HTTPResponseHandler(addGoodProxyCF));
+     Response addGoodResponse = addGoodProxyCF.get(5, TimeUnit.SECONDS);
+     context.assertEquals(addGoodResponse.code, HttpURLConnection.HTTP_CREATED);
+     String proxyId = addGoodResponse.body.getString("id");
+     System.out.println(addGoodResponse.body +
+       "\nStatus - " + addGoodResponse.code + " at " + System.currentTimeMillis() + " for " + proxyUrl);
+
+
+     /**update a proxyId fail*/
+     CompletableFuture<Response> updateBadCF = new CompletableFuture();
+     String updateProxyURL = proxyUrl +"/"+proxyId;
+     send(updateProxyURL, context, HttpMethod.PUT, badProxyObject.encode(),
+       SUPPORTED_CONTENT_TYPE_JSON_DEF, 422,  new HTTPNoBodyResponseHandler(updateBadCF));
+     Response updateBadResponse = updateBadCF.get(5, TimeUnit.SECONDS);
+     context.assertEquals(updateBadResponse.code, 422);
+     System.out.println(updateBadResponse.body +
+       "\nStatus - " + updateBadResponse.code + " at " + System.currentTimeMillis() + " for " + updateProxyURL);
+
+     /**update a proxyId fail*/
+     CompletableFuture<Response> updateNoCF = new CompletableFuture();
+     send(updateProxyURL, context, HttpMethod.PUT, noProxyObject.encode(),
+       SUPPORTED_CONTENT_TYPE_JSON_DEF, 422,  new HTTPNoBodyResponseHandler(updateNoCF));
+     Response updateNoResponse = updateNoCF.get(5, TimeUnit.SECONDS);
+     context.assertEquals(updateNoResponse.code, 422);
+     System.out.println(updateNoResponse.body +
+       "\nStatus - " + updateNoResponse.code + " at " + System.currentTimeMillis() + " for " + updateProxyURL);
+
+     /**update a proxyId success*/
+     CompletableFuture<Response> updateGoodCF = new CompletableFuture();
+     send(updateProxyURL, context, HttpMethod.PUT, goodProxyObject.encode(),
+       SUPPORTED_CONTENT_TYPE_JSON_DEF, 204,  new HTTPNoBodyResponseHandler(updateGoodCF));
+     Response updateGoodResponse = updateGoodCF.get(5, TimeUnit.SECONDS);
+     context.assertEquals(updateGoodResponse.code, HttpURLConnection.HTTP_NO_CONTENT);
+     System.out.println(updateGoodResponse.body +
+       "\nStatus - " + updateGoodResponse.code + " at " + System.currentTimeMillis() + " for " + updateProxyURL);
+
+  } catch (Exception e) {
+    e.printStackTrace();
+    context.fail(e.getMessage());
+  }
+ }
+
 
  private void send(String url, TestContext context, HttpMethod method, String content,
      String contentType, int errorCode, Handler<HttpClientResponse> handler) {

@@ -1,25 +1,21 @@
 package org.folio.rest.impl;
-import io.vertx.core.AsyncResult;
-import io.vertx.core.Context;
-import io.vertx.core.Future;
-import io.vertx.core.Handler;
-import io.vertx.core.Vertx;
-import io.vertx.core.logging.Logger;
-import io.vertx.core.logging.LoggerFactory;
+import java.time.Instant;
+import java.util.Date;
 import java.util.List;
 import java.util.Map;
+
 import javax.ws.rs.core.Response;
+
 import org.folio.rest.RestVerticle;
 import org.folio.rest.jaxrs.model.Errors;
 import org.folio.rest.jaxrs.model.ProxiesFor;
 import org.folio.rest.jaxrs.model.ProxyforCollection;
 import org.folio.rest.jaxrs.resource.ProxiesforResource;
-import org.folio.rest.jaxrs.resource.support.ResponseWrapper;
+import org.folio.rest.persist.PostgresClient;
 import org.folio.rest.persist.Criteria.Criteria;
 import org.folio.rest.persist.Criteria.Criterion;
 import org.folio.rest.persist.Criteria.Limit;
 import org.folio.rest.persist.Criteria.Offset;
-import org.folio.rest.persist.PostgresClient;
 import org.folio.rest.persist.cql.CQLWrapper;
 import org.folio.rest.tools.messages.MessageConsts;
 import org.folio.rest.tools.messages.Messages;
@@ -28,6 +24,14 @@ import org.folio.rest.tools.utils.TenantTool;
 import org.folio.rest.utils.ValidationHelper;
 import org.z3950.zing.cql.cql2pgjson.CQL2PgJSON;
 import org.z3950.zing.cql.cql2pgjson.FieldException;
+
+import io.vertx.core.AsyncResult;
+import io.vertx.core.Context;
+import io.vertx.core.Future;
+import io.vertx.core.Handler;
+import io.vertx.core.Vertx;
+import io.vertx.core.logging.Logger;
+import io.vertx.core.logging.LoggerFactory;
 /**
  *
  * @author kurt
@@ -110,7 +114,7 @@ public class ProxiesForAPI implements ProxiesforResource {
             ProxyforCollection collection = new ProxyforCollection();
             List<ProxiesFor> proxyforList = (List<ProxiesFor>)getReply.result().getResults();
             collection.setProxiesFor(proxyforList);
-            collection.setTotalRecords((Integer)getReply.result().getResultInfo().getTotalRecords());
+            collection.setTotalRecords(getReply.result().getResultInfo().getTotalRecords());
             asyncResultHandler.handle(Future.succeededFuture(
                     GetProxiesforResponse.withJsonOK(collection)));
           }
@@ -133,6 +137,12 @@ public class ProxiesForAPI implements ProxiesforResource {
           Context vertxContext) throws Exception {
     vertxContext.runOnContext(v -> {
       try {
+        Errors expDateError = isProxyValid(entity);
+        if(expDateError != null){
+          asyncResultHandler.handle(Future.succeededFuture(
+            PostProxiesforResponse.withJsonUnprocessableEntity(expDateError)));
+          return;
+        }
         String tenantId = getTenant(okapiHeaders);
         userAndProxyUserComboExists(entity.getUserId(), entity.getProxyUserId(),
                 tenantId, vertxContext).setHandler(existsRes -> {
@@ -293,6 +303,12 @@ public class ProxiesForAPI implements ProxiesforResource {
           Context vertxContext) throws Exception {
     vertxContext.runOnContext(v -> {
       try {
+        Errors expDateError = isProxyValid(entity);
+        if(expDateError != null){
+          asyncResultHandler.handle(Future.succeededFuture(
+            PostProxiesforResponse.withJsonUnprocessableEntity(expDateError)));
+          return;
+        }
         String tenantId = getTenant(okapiHeaders);
         PostgresClient.getInstance(vertxContext.owner(), tenantId).update(
                 PROXY_FOR_TABLE, entity, id, putReply -> {
@@ -368,4 +384,35 @@ public class ProxiesForAPI implements ProxiesforResource {
     return future;
   }
 
+  private Errors isProxyValid(ProxiesFor entity){
+    boolean valid = true;
+    Object date = null;
+    String expDate = "Not Defined";
+    Errors existsError = null;
+    Instant now = Instant.now();
+    //String text = now.format(DateTimeFormatter.ISO_INSTANT);
+    if(entity.getMeta() != null){
+      date = entity.getMeta().getAdditionalProperties().get("expirationDate");
+      if(date != null){
+        expDate = ((Date)date).toInstant().toString();
+        if(((Date)date).toInstant().compareTo(now) < 0){
+          valid = false;
+        }
+      }
+    }
+    else if(entity.getExpirationDate() != null){
+      expDate = entity.getExpirationDate().toInstant().toString();
+      if(entity.getExpirationDate().toInstant().compareTo(now) < 0 /*new version*/){
+        valid = false;
+      }
+    }
+    else if(entity.getExpirationDate() == null && date == null){
+      valid = false;
+    }
+    if(!valid){
+      existsError = ValidationHelper.createValidationErrorMessage(
+        "expirationDate", expDate, "Proxy expirationDate is in the past");
+    }
+    return existsError;
+  }
 }
